@@ -1,13 +1,10 @@
-// Automated regression tests for the Spot the Difference game.
-// Run with: node tests/spot-difference.test.js
-// These tests validate game data and deterministic gameplay rules without a browser.
 const fs=require('fs');
 const html=fs.readFileSync('index.html','utf8');
 function assert(ok,msg){if(!ok)throw new Error('FAIL: '+msg);console.log('PASS: '+msg)}
 function extractData(){
-  const m=html.match(/const DATA=([\\s\\S]*?)\\];\\nconst levels=/);
-  if(!m)throw new Error('Cannot locate DATA');
-  return Function('return ('+m[1]+'])')();
+  const start=html.indexOf('const DATA=['), end=html.indexOf('];\nfunction D',start);
+  if(start<0||end<0)throw new Error('Cannot locate DATA block');
+  return Function('return ('+html.slice(start+'const DATA='.length,end+1)+')')();
 }
 const data=extractData();
 assert(Array.isArray(data)&&data.length===10,'10 levels exist');
@@ -28,10 +25,11 @@ data.forEach((level,li)=>{
   });
 });
 
-// Deterministic hit-test model: target centers must be accepted, found targets must be ignored.
+// Model the game's target selection: each target is independently discoverable,
+// and once found it is excluded from subsequent clicks.
 function hit(hits,x,y,found=[]){
   let best=-1,bd=Infinity;
-  hits.forEach((h,i)=>{if(found.includes(i))return;const q=Math.hypot(x-h[1],y-h[2]);if(q<=Math.max(18,h[3]*0.45)+24&&q<bd){best=i;bd=q}});
+  hits.forEach((h,i)=>{if(found.includes(i))return;const dx=(x-h[1])/(h[3]+14),dy=(y-h[2])/(h[3]+14);if(dx*dx+dy*dy<=1){const d=Math.hypot(x-h[1],y-h[2]);if(d<bd){best=i;bd=d}}});
   return best;
 }
 data.forEach((level,li)=>{
@@ -43,14 +41,19 @@ data.forEach((level,li)=>{
   });
 });
 
-// Regression checks for previously reported rules.
+// Regression checks for the previously reported gameplay bugs.
 assert(/score=Math\.max\(0,score-100\)/.test(html),'hint subtracts 100 points');
 assert(/Math\.max\(400,1000-Math\.floor\(s-20\)\*25\)/.test(html),'score decays after 20 seconds and floors at 400');
 assert(/if\(wrong>=5\)over\(\)/.test(html),'five wrong clicks trigger Game Over');
 assert(/save\.coins\+=100/.test(html),'completed level awards 100 coins');
-assert(/d\.r\+12/.test(html),'circle size is derived from target radius');
+assert(/function buildVisualTargets\(\)/.test(html),'real pixel-difference target builder exists');
+assert(/getImageData\(0,0,W,H\)/.test(html),'target builder compares rendered pixels');
+assert(/levels\[cur\]\.hits\.forEach/.test(html),'visual targets are anchored to each intended difference');
+assert(/visualTargets=targets/.test(html),'exactly one target is built per intended difference');
+assert(/t\.rx\+8/.test(html)&&/t\.ry\+8/.test(html),'marker size follows detected target dimensions');
 assert(/canvas\.width\/r\.width/.test(html)&&/canvas\.height\/r\.height/.test(html),'pointer coordinates scale with displayed canvas size');
-assert(/const DATA=/.test(html)&&/const levels=DATA\.map/.test(html),'game uses structured level data');
+assert(/let visualTargets=\[\]/g.test(html),'visual target state is declared');
+assert((html.match(/let visualTargets=\[\]/g)||[]).length===1,'visual target state is declared only once');
 
 console.log('\nALL AUTOMATED REGRESSION TESTS PASSED.');
-console.log('Note: this does not replace a real browser/Android touch smoke test.');
+console.log('Note: this is a deterministic code/data test, not a real Android browser touch test.');
