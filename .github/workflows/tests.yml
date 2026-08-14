@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   regression:
@@ -20,16 +20,5 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Apply gameplay bug fixes
-        run: node tools/patch-game.js
-      - name: Commit gameplay fixes
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if ! git diff --quiet -- index.html; then
-            git add index.html
-            git commit -m "Fix visual difference hit detection [skip ci]"
-            git push
-          fi
       - name: Run gameplay regression tests
         run: node tests/spot-difference.test.js
